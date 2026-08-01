@@ -14,9 +14,10 @@ Designed for commuters, travelers, and transit riders, MetroNap runs silently in
 
 ## 📱 App Interface Mockup
 
-![MetroNap Mockup](assets/metro_nap_mockup.jpg)
+<p align="center">
+  <img src="assets/metro_nap_mockup.jpg" width="320" alt="MetroNap Mockup" />
+</p>
 
----
 
 ## ✨ Features
 
