@@ -52,6 +52,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.osmdroid.config.Configuration
+import org.osmdroid.util.BoundingBox
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
@@ -59,29 +60,79 @@ import org.osmdroid.views.overlay.Polygon
 import java.util.Locale
 
 // ──────────────────────────────────────────────────────────────────
-//  THEME – all Color objects are compile-time constants (no allocs)
+//  THEME & COLOR SYSTEM
 // ──────────────────────────────────────────────────────────────────
-private val MidnightBlack = Color(0xFF090B11)
-private val DeepSlate     = Color(0xFF131722)
-private val CardBg        = Color(0xFF1E2230)
-private val BorderBlue    = Color(0xFF2C3246)
+data class ThemeColors(
+    val background: Color,
+    val surface: Color,
+    val cardBackground: Color,
+    val border: Color,
+    val primary: Color,
+    val secondary: Color,
+    val tertiary: Color,
+    val textPrimary: Color,
+    val textSecondary: Color,
+    val isDark: Boolean
+)
+
 private val ElectricPurple = Color(0xFF8B5CF6)
 private val CyberPink     = Color(0xFFEC4899)
 private val NeonCyan      = Color(0xFF06B6D4)
-private val TextWhite     = Color(0xFFF8FAFC)
-private val TextGray      = Color(0xFF94A3B8)
 private val AlarmRed      = Color(0xFFEF4444)
 
-// Pre-computed Android int colors for map overlays (avoids repeated toArgb calls in draw loop)
-private val CIRCLE_FILL_COLOR   = android.graphics.Color.argb(45, 139, 92, 246)
-private val CIRCLE_STROKE_COLOR = android.graphics.Color.rgb(139, 92, 246)
+private val DarkThemeColors = ThemeColors(
+    background = Color(0xFF090B11),
+    surface = Color(0xFF131722),
+    cardBackground = Color(0xFF1E2230),
+    border = Color(0xFF2C3246),
+    primary = ElectricPurple,
+    secondary = NeonCyan,
+    tertiary = CyberPink,
+    textPrimary = Color(0xFFF8FAFC),
+    textSecondary = Color(0xFF94A3B8),
+    isDark = true
+)
 
-// Theme applied once, stored as top-level val to prevent re-creation
-private val MetroColorScheme = darkColorScheme(
-    primary = ElectricPurple, secondary = NeonCyan, tertiary = CyberPink,
-    background = MidnightBlack, surface = DeepSlate,
-    onPrimary = Color.White, onSecondary = Color.White,
-    onBackground = TextWhite, onSurface = TextWhite
+private val LightThemeColors = ThemeColors(
+    background = Color(0xFFF8FAFC), // soft slate white
+    surface = Color(0xFFF1F5F9),    // light slate gray
+    cardBackground = Color(0xFFFFFFFF), // pure white
+    border = Color(0xFFE2E8F0),     // light border slate
+    primary = Color(0xFF7C3AED),    // rich purple
+    secondary = Color(0xFF0891B2),  // rich cyan/teal
+    tertiary = Color(0xFFDB2777),   // rich pink
+    textPrimary = Color(0xFF0F172A), // deep slate text
+    textSecondary = Color(0xFF64748B), // muted slate text
+    isDark = false
+)
+
+// Pre-computed Android int colors for map overlays (avoids repeated toArgb calls in draw loop)
+private val CIRCLE_FILL_COLOR_DARK   = android.graphics.Color.argb(45, 139, 92, 246)
+private val CIRCLE_STROKE_COLOR_DARK = android.graphics.Color.rgb(139, 92, 246)
+
+private val CIRCLE_FILL_COLOR_LIGHT   = android.graphics.Color.argb(45, 124, 58, 237)
+private val CIRCLE_STROKE_COLOR_LIGHT = android.graphics.Color.rgb(124, 58, 237)
+
+private val DarkMapTileSource = org.osmdroid.tileprovider.tilesource.XYTileSource(
+    "CartoDarkMatter", 0, 20, 256, ".png",
+    arrayOf(
+        "https://a.basemaps.cartocdn.com/dark_all/",
+        "https://b.basemaps.cartocdn.com/dark_all/",
+        "https://c.basemaps.cartocdn.com/dark_all/",
+        "https://d.basemaps.cartocdn.com/dark_all/"
+    ),
+    "© OpenStreetMap contributors, © CARTO"
+)
+
+private val LightMapTileSource = org.osmdroid.tileprovider.tilesource.XYTileSource(
+    "CartoLightPositron", 0, 20, 256, ".png",
+    arrayOf(
+        "https://a.basemaps.cartocdn.com/light_all/",
+        "https://b.basemaps.cartocdn.com/light_all/",
+        "https://c.basemaps.cartocdn.com/light_all/",
+        "https://d.basemaps.cartocdn.com/light_all/"
+    ),
+    "© OpenStreetMap contributors, © CARTO"
 )
 
 // Pre-computed shape objects shared across all composables (avoids repeated allocations)
@@ -92,8 +143,33 @@ private val RoundedShape20 = RoundedCornerShape(20.dp)
 private val RoundedShape28 = RoundedCornerShape(28.dp)
 
 @Composable
-fun MetroNapTheme(content: @Composable () -> Unit) {
-    MaterialTheme(colorScheme = MetroColorScheme, content = content)
+fun MetroNapTheme(isDark: Boolean, content: @Composable () -> Unit) {
+    val scheme = if (isDark) {
+        darkColorScheme(
+            primary = DarkThemeColors.primary,
+            secondary = DarkThemeColors.secondary,
+            tertiary = DarkThemeColors.tertiary,
+            background = DarkThemeColors.background,
+            surface = DarkThemeColors.surface,
+            onPrimary = Color.White,
+            onSecondary = Color.White,
+            onBackground = DarkThemeColors.textPrimary,
+            onSurface = DarkThemeColors.textPrimary
+        )
+    } else {
+        lightColorScheme(
+            primary = LightThemeColors.primary,
+            secondary = LightThemeColors.secondary,
+            tertiary = LightThemeColors.tertiary,
+            background = LightThemeColors.background,
+            surface = LightThemeColors.surface,
+            onPrimary = Color.White,
+            onSecondary = Color.White,
+            onBackground = LightThemeColors.textPrimary,
+            onSurface = LightThemeColors.textPrimary
+        )
+    }
+    MaterialTheme(colorScheme = scheme, content = content)
 }
 
 // ──────────────────────────────────────────────────────
@@ -103,7 +179,6 @@ data class SearchResult(val name: String, val latitude: Double, val longitude: D
 
 data class PresetLocation(val name: String, val latitude: Double, val longitude: Double, val description: String)
 
-// Presets stored as a top-level immutable list (never re-created)
 private val TransitPresets = listOf(
     PresetLocation("Rajiv Chowk Metro Station", 28.6328, 77.2195, "Delhi Metro Blue/Yellow Line"),
     PresetLocation("Huda City Centre Metro", 28.4593, 77.0725, "Gurugram, Yellow Line"),
@@ -113,7 +188,6 @@ private val TransitPresets = listOf(
     PresetLocation("Shibuya Station", 35.6580, 139.7016, "Tokyo Subway, Japan")
 )
 
-// Radius chip values stored as immutable list (never re-created)
 private val RadiusPresets = listOf(100f, 200f, 500f, 750f, 1000f)
 
 // ──────────────────────────────────────────────────────
@@ -123,25 +197,51 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // OSMDroid configuration — done once before any MapView is inflated
         Configuration.getInstance().apply {
             userAgentValue = "MetroNapTransitAlarm/1.0 (contact: metronap_app@outlook.com)"
             load(applicationContext, getSharedPreferences("osmdroid", Context.MODE_PRIVATE))
             userAgentValue = "MetroNapTransitAlarm/1.0 (contact: metronap_app@outlook.com)"
-            // Tile cache optimizations
-            tileFileSystemCacheMaxBytes = 50L * 1024 * 1024 // 50 MB disk cache
-            tileFileSystemCacheTrimBytes = 40L * 1024 * 1024 // trim at 40 MB
-            tileDownloadThreads = 4.toShort() // parallel tile downloads
+            tileFileSystemCacheMaxBytes = 50L * 1024 * 1024
+            tileFileSystemCacheTrimBytes = 40L * 1024 * 1024
+            tileDownloadThreads = 4.toShort()
         }
 
         enableEdgeToEdge()
         setContent {
-            MetroNapTheme {
+            val context = LocalContext.current
+            val sharedPreferences = remember { context.getSharedPreferences("metronap_prefs", Context.MODE_PRIVATE) }
+            var isDarkTheme by remember {
+                mutableStateOf(sharedPreferences.getBoolean("dark_theme", true))
+            }
+
+            MetroNapTheme(isDark = isDarkTheme) {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    MetroNapApp(modifier = Modifier.padding(innerPadding))
+                    MetroNapApp(
+                        isDarkTheme = isDarkTheme,
+                        onThemeToggle = {
+                            isDarkTheme = !isDarkTheme
+                            sharedPreferences.edit().putBoolean("dark_theme", isDarkTheme).apply()
+                        },
+                        modifier = Modifier.padding(innerPadding)
+                    )
                 }
             }
         }
+    }
+}
+
+// Helper to fit bounding box showing both current user location and target
+fun fitMapToPoints(mapView: MapView?, p1: GeoPoint?, p2: GeoPoint?) {
+    if (mapView == null || p1 == null || p2 == null) return
+    try {
+        val points = ArrayList<GeoPoint>().apply {
+            add(p1)
+            add(p2)
+        }
+        val box = BoundingBox.fromGeoPoints(points)
+        mapView.zoomToBoundingBox(box, true, 120)
+    } catch (e: Exception) {
+        Log.e("MetroNap", "Failed to fit map: ${e.message}")
     }
 }
 
@@ -149,15 +249,24 @@ class MainActivity : ComponentActivity() {
 //  MAIN COMPOSABLE
 // ──────────────────────────────────────────────────────
 @Composable
-fun MetroNapApp(modifier: Modifier = Modifier) {
+fun MetroNapApp(
+    isDarkTheme: Boolean,
+    onThemeToggle: () -> Unit,
+    modifier: Modifier = Modifier
+) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
+    
+    val colors = if (isDarkTheme) DarkThemeColors else LightThemeColors
 
     // --- Reactive service state (zero-copy flow collectors) ---
     val isTracking      by LocationAlarmService.isTracking.collectAsState()
     val alarmTriggered   by LocationAlarmService.alarmTriggered.collectAsState()
     val currentDistance  by LocationAlarmService.currentDistance.collectAsState()
     val trackingName     by LocationAlarmService.destinationName.collectAsState()
+    val serviceDestLat   by LocationAlarmService.destinationLatitude.collectAsState()
+    val serviceDestLon   by LocationAlarmService.destinationLongitude.collectAsState()
+    val serviceUserLocation by LocationAlarmService.currentUserLocation.collectAsState()
 
     // --- Local UI state ---
     var searchFinished      by remember { mutableStateOf(false) }
@@ -172,8 +281,24 @@ fun MetroNapApp(modifier: Modifier = Modifier) {
 
     val keyboardController = LocalSoftwareKeyboardController.current
 
-    // ── OPTIMIZATION: Cache marker drawables (generated exactly once) ──
-    val (userMarkerIcon, destMarkerIcon) = remember {
+    // Dynamically resolve displayed destination to keep sync even if recreated
+    val displayedDestination = remember(selectedDestination, isTracking, serviceDestLat, serviceDestLon, trackingName) {
+        if (isTracking && serviceDestLat != null && serviceDestLon != null) {
+            SearchResult(trackingName, serviceDestLat!!, serviceDestLon!!)
+        } else {
+            selectedDestination
+        }
+    }
+
+    // Sync service location updates to local user location state
+    LaunchedEffect(serviceUserLocation) {
+        serviceUserLocation?.let {
+            userLocationState = GeoPoint(it.latitude, it.longitude)
+        }
+    }
+
+    // ── OPTIMIZATION: Cache marker drawables (regenerated when theme changes) ──
+    val (userMarkerIcon, destMarkerIcon) = remember(isDarkTheme) {
         val density = context.resources.displayMetrics.density
         fun makeIcon(color: Color, sizeDp: Int): android.graphics.drawable.BitmapDrawable {
             val px = (sizeDp * density).toInt()
@@ -191,12 +316,24 @@ fun MetroNapApp(modifier: Modifier = Modifier) {
             c.drawCircle(px / 2f, px / 2f, px / 3f, p)
             return android.graphics.drawable.BitmapDrawable(context.resources, bmp)
         }
-        Pair(makeIcon(ElectricPurple, 24), makeIcon(CyberPink, 28))
+        Pair(makeIcon(colors.primary, 24), makeIcon(colors.tertiary, 28))
     }
 
-    // ── OPTIMIZATION: Cache circle geometry (only recomputed when dest/radius changes) ──
-    val cachedCirclePoints = remember(selectedDestination, alarmRadius) {
-        selectedDestination?.let { Polygon.pointsAsCircle(GeoPoint(it.latitude, it.longitude), alarmRadius.toDouble()) }
+    // ── OPTIMIZATION: Cache circle geometry (recomputed when destination/radius changes) ──
+    val cachedCirclePoints = remember(displayedDestination, alarmRadius) {
+        displayedDestination?.let { Polygon.pointsAsCircle(GeoPoint(it.latitude, it.longitude), alarmRadius.toDouble()) }
+    }
+
+    // Auto-fit bounds once when tracking starts or destination is selected
+    LaunchedEffect(isTracking) {
+        if (isTracking) {
+            delay(1000L) // Wait a brief moment for the map layout
+            val userPt = userLocationState
+            val destPt = displayedDestination?.let { GeoPoint(it.latitude, it.longitude) }
+            if (userPt != null && destPt != null) {
+                fitMapToPoints(mapViewRef, userPt, destPt)
+            }
+        }
     }
 
     // ── Permissions ──
@@ -279,7 +416,7 @@ fun MetroNapApp(modifier: Modifier = Modifier) {
     // ── Debounced live search ──
     LaunchedEffect(query) {
         val trimmed = query.trim()
-        if (selectedDestination != null && trimmed == selectedDestination!!.name) return@LaunchedEffect
+        if (displayedDestination != null && trimmed == displayedDestination.name) return@LaunchedEffect
         if (trimmed.length < 3) { searchResults = emptyList(); searchFinished = false; return@LaunchedEffect }
         delay(500L)
         doSearch(trimmed, fromDebounce = true)
@@ -298,13 +435,17 @@ fun MetroNapApp(modifier: Modifier = Modifier) {
     // ════════════════════════════════════════════════════════
     //  LAYOUT
     // ════════════════════════════════════════════════════════
-    Box(modifier = modifier.fillMaxSize().background(MidnightBlack)) {
+    Box(modifier = modifier.fillMaxSize().background(colors.background)) {
         Column(modifier = Modifier.fillMaxSize()) {
 
             // ── HEADER ──
-            HeaderSection()
+            HeaderSection(
+                isDarkTheme = isDarkTheme,
+                onThemeToggle = onThemeToggle,
+                colors = colors
+            )
 
-            // ── MAP CARD (visually isolated with border + padding) ──
+            // ── MAP CARD ──
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -312,26 +453,16 @@ fun MetroNapApp(modifier: Modifier = Modifier) {
                     .padding(horizontal = 16.dp, vertical = 8.dp)
                     .shadow(4.dp, shape = RoundedShape20)
                     .clip(RoundedShape20)
-                    .border(1.dp, BorderBlue, RoundedShape20)
+                    .border(1.dp, colors.border, RoundedShape20)
             ) {
                 AndroidView(
                     factory = { ctx ->
                         MapView(ctx).apply {
-                            setTileSource(org.osmdroid.tileprovider.tilesource.XYTileSource(
-                                "CartoDarkMatter", 0, 20, 256, ".png",
-                                arrayOf(
-                                    "https://a.basemaps.cartocdn.com/dark_all/",
-                                    "https://b.basemaps.cartocdn.com/dark_all/",
-                                    "https://c.basemaps.cartocdn.com/dark_all/",
-                                    "https://d.basemaps.cartocdn.com/dark_all/"
-                                ),
-                                "© OpenStreetMap contributors, © CARTO"
-                            ))
+                            setTileSource(if (isDarkTheme) DarkMapTileSource else LightMapTileSource)
                             setMultiTouchControls(true)
                             zoomController.setVisibility(
                                 org.osmdroid.views.CustomZoomButtonsController.Visibility.NEVER
                             )
-                            // Reduce overdraw: disable unneeded map features
                             isTilesScaledToDpi = true
                             isHorizontalMapRepetitionEnabled = false
                             isVerticalMapRepetitionEnabled = false
@@ -340,6 +471,12 @@ fun MetroNapApp(modifier: Modifier = Modifier) {
                         }
                     },
                     update = { mapView ->
+                        // Synchronize map tile source with dark/light mode
+                        val expectedTileSource = if (isDarkTheme) DarkMapTileSource else LightMapTileSource
+                        if (mapView.tileProvider.tileSource.name != expectedTileSource.name) {
+                            mapView.setTileSource(expectedTileSource)
+                        }
+
                         mapView.overlays.clear()
 
                         userLocationState?.let { pos ->
@@ -350,12 +487,12 @@ fun MetroNapApp(modifier: Modifier = Modifier) {
                             })
                         }
 
-                        selectedDestination?.let { dest ->
+                        displayedDestination?.let { dest ->
                             cachedCirclePoints?.let { pts ->
                                 mapView.overlays.add(Polygon().apply {
                                     points = pts
-                                    fillPaint.color = CIRCLE_FILL_COLOR
-                                    outlinePaint.color = CIRCLE_STROKE_COLOR
+                                    fillPaint.color = if (isDarkTheme) CIRCLE_FILL_COLOR_DARK else CIRCLE_FILL_COLOR_LIGHT
+                                    outlinePaint.color = if (isDarkTheme) CIRCLE_STROKE_COLOR_DARK else CIRCLE_STROKE_COLOR_LIGHT
                                     outlinePaint.strokeWidth = 3f
                                 })
                             }
@@ -378,28 +515,44 @@ fun MetroNapApp(modifier: Modifier = Modifier) {
                 ) {
                     FloatingActionButton(
                         onClick = { mapViewRef?.controller?.zoomIn() },
-                        containerColor = CardBg.copy(alpha = 0.85f),
-                        contentColor = TextWhite, shape = CircleShape,
+                        containerColor = colors.cardBackground.copy(alpha = 0.85f),
+                        contentColor = colors.textPrimary, shape = CircleShape,
                         modifier = Modifier.size(38.dp)
                     ) { Icon(Icons.Filled.Add, "Zoom In", Modifier.size(18.dp)) }
 
                     FloatingActionButton(
                         onClick = { mapViewRef?.controller?.zoomOut() },
-                        containerColor = CardBg.copy(alpha = 0.85f),
-                        contentColor = TextWhite, shape = CircleShape,
+                        containerColor = colors.cardBackground.copy(alpha = 0.85f),
+                        contentColor = colors.textPrimary, shape = CircleShape,
                         modifier = Modifier.size(38.dp)
                     ) { Icon(Icons.Filled.Remove, "Zoom Out", Modifier.size(18.dp)) }
 
-                    selectedDestination?.let { dest ->
+                    displayedDestination?.let { dest ->
                         FloatingActionButton(
                             onClick = {
                                 mapViewRef?.controller?.animateTo(GeoPoint(dest.latitude, dest.longitude))
                                 mapViewRef?.controller?.setZoom(16.0)
                             },
-                            containerColor = CyberPink.copy(alpha = 0.9f),
-                            contentColor = TextWhite, shape = CircleShape,
+                            containerColor = colors.tertiary.copy(alpha = 0.9f),
+                            contentColor = Color.White, shape = CircleShape,
                             modifier = Modifier.size(38.dp)
                         ) { Icon(Icons.Filled.Place, "Destination", Modifier.size(18.dp)) }
+                    }
+
+                    // Fit bounds button (visible when both user location and destination are set)
+                    val destPt = displayedDestination?.let { GeoPoint(it.latitude, it.longitude) }
+                    if (userLocationState != null && destPt != null) {
+                        FloatingActionButton(
+                            onClick = {
+                                fitMapToPoints(mapViewRef, userLocationState, destPt)
+                            },
+                            containerColor = colors.secondary,
+                            contentColor = Color.White,
+                            shape = CircleShape,
+                            modifier = Modifier.size(38.dp)
+                        ) {
+                            Icon(Icons.Filled.ZoomOutMap, "Fit Route", Modifier.size(18.dp))
+                        }
                     }
 
                     FloatingActionButton(
@@ -409,7 +562,7 @@ fun MetroNapApp(modifier: Modifier = Modifier) {
                                 mapViewRef?.controller?.setZoom(15.5)
                             }
                         },
-                        containerColor = ElectricPurple, contentColor = TextWhite,
+                        containerColor = colors.primary, contentColor = Color.White,
                         shape = CircleShape, modifier = Modifier.size(38.dp)
                     ) { Icon(Icons.Filled.MyLocation, "My Location", Modifier.size(18.dp)) }
                 }
@@ -417,7 +570,7 @@ fun MetroNapApp(modifier: Modifier = Modifier) {
 
             // Divider between map and scrollable content
             HorizontalDivider(
-                color = BorderBlue.copy(alpha = 0.6f), thickness = 1.dp,
+                color = colors.border.copy(alpha = 0.6f), thickness = 1.dp,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp)
             )
 
@@ -432,7 +585,7 @@ fun MetroNapApp(modifier: Modifier = Modifier) {
 
                 // ▸ Permissions banner
                 if (!hasLocationPermission || !hasNotificationPermission) {
-                    PermissionsBanner(permissionsLauncher)
+                    PermissionsBanner(permissionsLauncher, colors)
                 }
 
                 // ▸ Active tracking card
@@ -442,7 +595,8 @@ fun MetroNapApp(modifier: Modifier = Modifier) {
                         trackingName = trackingName,
                         currentDistance = currentDistance,
                         alarmRadius = alarmRadius,
-                        context = context
+                        context = context,
+                        colors = colors
                     )
                 }
 
@@ -455,7 +609,7 @@ fun MetroNapApp(modifier: Modifier = Modifier) {
                         isSearching = isSearching,
                         searchResults = searchResults,
                         searchFinished = searchFinished,
-                        selectedDestination = selectedDestination,
+                        selectedDestination = displayedDestination,
                         alarmRadius = alarmRadius,
                         onSelectResult = { res ->
                             selectedDestination = res
@@ -469,7 +623,7 @@ fun MetroNapApp(modifier: Modifier = Modifier) {
                         },
                         onRadiusChange = { alarmRadius = it },
                         onActivate = {
-                            val dest = selectedDestination ?: run {
+                            val dest = displayedDestination ?: run {
                                 selectedDestination = SearchResult(
                                     TransitPresets[0].name,
                                     TransitPresets[0].latitude,
@@ -488,14 +642,15 @@ fun MetroNapApp(modifier: Modifier = Modifier) {
                             } else {
                                 context.startService(intent)
                             }
-                        }
+                        },
+                        colors = colors
                     )
                 }
 
                 // ▸ Preset stations
                 if (!isTracking) {
                     PresetsCard(
-                        selectedDestination = selectedDestination,
+                        selectedDestination = displayedDestination,
                         onSelectPreset = { preset ->
                             selectedDestination = SearchResult(preset.name, preset.latitude, preset.longitude)
                             query = preset.name
@@ -505,7 +660,8 @@ fun MetroNapApp(modifier: Modifier = Modifier) {
                                 map.controller.animateTo(GeoPoint(preset.latitude, preset.longitude))
                                 map.controller.setZoom(16.0)
                             }
-                        }
+                        },
+                        colors = colors
                     )
                 }
             }
@@ -517,7 +673,8 @@ fun MetroNapApp(modifier: Modifier = Modifier) {
                 pulseAlpha = pulseAlpha,
                 trackingName = trackingName,
                 currentDistance = currentDistance,
-                context = context
+                context = context,
+                colors = colors
             )
         }
     }
@@ -528,25 +685,46 @@ fun MetroNapApp(modifier: Modifier = Modifier) {
 // ════════════════════════════════════════════════════════════
 
 @Composable
-private fun HeaderSection() {
-    Box(
-        modifier = Modifier.fillMaxWidth().background(MidnightBlack)
-            .padding(horizontal = 20.dp, vertical = 12.dp)
+private fun HeaderSection(
+    isDarkTheme: Boolean,
+    onThemeToggle: () -> Unit,
+    colors: ThemeColors
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().background(colors.background)
+            .padding(horizontal = 20.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
     ) {
         Column {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Filled.DirectionsSubway, "Metro", tint = ElectricPurple, modifier = Modifier.size(24.dp))
+                Icon(Icons.Filled.DirectionsSubway, "Metro", tint = colors.primary, modifier = Modifier.size(24.dp))
                 Spacer(Modifier.width(8.dp))
-                Text("MetroNap", fontSize = 22.sp, fontWeight = FontWeight.Black, color = TextWhite, letterSpacing = (-0.5).sp)
+                Text("MetroNap", fontSize = 22.sp, fontWeight = FontWeight.Black, color = colors.textPrimary, letterSpacing = (-0.5).sp)
             }
-            Text("Sleep soundly on the transit; we will wake you up.", fontSize = 11.sp, color = TextGray)
+            Text("Sleep soundly on the transit; we will wake you up.", fontSize = 11.sp, color = colors.textSecondary)
+        }
+
+        IconButton(
+            onClick = onThemeToggle,
+            modifier = Modifier
+                .clip(CircleShape)
+                .background(colors.cardBackground)
+                .border(1.dp, colors.border, CircleShape)
+        ) {
+            Icon(
+                imageVector = if (isDarkTheme) Icons.Filled.LightMode else Icons.Filled.DarkMode,
+                contentDescription = "Toggle Theme",
+                tint = colors.secondary
+            )
         }
     }
 }
 
 @Composable
 private fun PermissionsBanner(
-    launcher: androidx.activity.result.ActivityResultLauncher<Array<String>>
+    launcher: androidx.activity.result.ActivityResultLauncher<Array<String>>,
+    colors: ThemeColors
 ) {
     Card(
         colors = CardDefaults.cardColors(containerColor = AlarmRed.copy(alpha = 0.15f)),
@@ -557,8 +735,8 @@ private fun PermissionsBanner(
             Icon(Icons.Filled.Warning, "Warning", tint = AlarmRed, modifier = Modifier.size(32.dp))
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                Text("Permissions Required", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = TextWhite)
-                Text("Location and notification permissions are needed for alarms.", fontSize = 12.sp, color = TextGray)
+                Text("Permissions Required", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = colors.textPrimary)
+                Text("Location and notification permissions are needed for alarms.", fontSize = 12.sp, color = colors.textSecondary)
             }
             Spacer(Modifier.width(8.dp))
             Button(
@@ -584,16 +762,17 @@ private fun TrackingCard(
     trackingName: String,
     currentDistance: Float?,
     alarmRadius: Float,
-    context: Context
+    context: Context,
+    colors: ThemeColors
 ) {
     Card(
         colors = CardDefaults.cardColors(
-            containerColor = if (alarmTriggered) AlarmRed.copy(alpha = 0.35f) else CardBg
+            containerColor = if (alarmTriggered) AlarmRed.copy(alpha = 0.35f) else colors.cardBackground
         ),
         shape = RoundedShape20,
         modifier = Modifier.fillMaxWidth()
-            .border(1.dp, if (alarmTriggered) AlarmRed else ElectricPurple.copy(alpha = 0.6f), RoundedShape20)
-            .shadow(if (alarmTriggered) 12.dp else 4.dp, spotColor = if (alarmTriggered) AlarmRed else ElectricPurple)
+            .border(1.dp, if (alarmTriggered) AlarmRed else colors.primary.copy(alpha = 0.6f), RoundedShape20)
+            .shadow(if (alarmTriggered) 12.dp else 4.dp, spotColor = if (alarmTriggered) AlarmRed else colors.primary)
     ) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(18.dp),
@@ -601,11 +780,11 @@ private fun TrackingCard(
         ) {
             Text(
                 "MONITORING TRANSIT ALARM", fontSize = 11.sp, fontWeight = FontWeight.Bold,
-                color = if (alarmTriggered) Color.White else NeonCyan, letterSpacing = 1.sp
+                color = if (alarmTriggered) Color.White else colors.secondary, letterSpacing = 1.sp
             )
             Spacer(Modifier.height(4.dp))
             Text(
-                trackingName, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = TextWhite,
+                trackingName, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary,
                 textAlign = TextAlign.Center, maxLines = 1, overflow = TextOverflow.Ellipsis
             )
             Spacer(Modifier.height(16.dp))
@@ -614,13 +793,13 @@ private fun TrackingCard(
                 Text(
                     text = formatDistanceUI(currentDistance),
                     fontSize = 46.sp, fontWeight = FontWeight.Black,
-                    color = if (alarmTriggered) Color.White else ElectricPurple,
+                    color = if (alarmTriggered) Color.White else colors.primary,
                     letterSpacing = (-1).sp
                 )
                 Spacer(Modifier.height(4.dp))
-                Text("to destination (Alarm radius: ${alarmRadius.toInt()}m)", fontSize = 12.sp, color = TextGray)
+                Text("to destination (Alarm radius: ${alarmRadius.toInt()}m)", fontSize = 12.sp, color = colors.textSecondary)
             } else {
-                Text("Calculating...", fontSize = 32.sp, fontWeight = FontWeight.Bold, color = TextGray)
+                Text("Calculating...", fontSize = 32.sp, fontWeight = FontWeight.Bold, color = colors.textSecondary)
             }
 
             Spacer(Modifier.height(20.dp))
@@ -671,47 +850,48 @@ private fun DestinationConfigCard(
     alarmRadius: Float,
     onSelectResult: (SearchResult) -> Unit,
     onRadiusChange: (Float) -> Unit,
-    onActivate: () -> Unit
+    onActivate: () -> Unit,
+    colors: ThemeColors
 ) {
     Card(
-        colors = CardDefaults.cardColors(containerColor = CardBg),
+        colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
         shape = RoundedShape20,
-        modifier = Modifier.fillMaxWidth().border(1.dp, BorderBlue, RoundedShape20)
+        modifier = Modifier.fillMaxWidth().border(1.dp, colors.border, RoundedShape20)
     ) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(18.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            Text("SET TARGET DESTINATION", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = ElectricPurple, letterSpacing = 1.sp)
+            Text("SET TARGET DESTINATION", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = colors.primary, letterSpacing = 1.sp)
 
             // Search input
             OutlinedTextField(
                 value = query, onValueChange = onQueryChange,
-                label = { Text("Search location / metro station") },
+                label = { Text("Search location / metro station", color = colors.textSecondary) },
                 trailingIcon = {
                     IconButton(onClick = onSearch) {
-                        Icon(Icons.Rounded.Search, "Search", tint = ElectricPurple)
+                        Icon(Icons.Rounded.Search, "Search", tint = colors.primary)
                     }
                 },
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                 keyboardActions = KeyboardActions(onSearch = { onSearch() }),
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = ElectricPurple, unfocusedBorderColor = BorderBlue,
-                    focusedTextColor = TextWhite, unfocusedTextColor = TextWhite,
-                    focusedLabelColor = ElectricPurple, unfocusedLabelColor = TextGray
+                    focusedBorderColor = colors.primary, unfocusedBorderColor = colors.border,
+                    focusedTextColor = colors.textPrimary, unfocusedTextColor = colors.textPrimary,
+                    focusedLabelColor = colors.primary, unfocusedLabelColor = colors.textSecondary
                 ),
                 singleLine = true, shape = RoundedShape12, modifier = Modifier.fillMaxWidth()
             )
 
             // Search results
             if (isSearching) {
-                LinearProgressIndicator(Modifier.fillMaxWidth(), color = ElectricPurple, trackColor = BorderBlue)
+                LinearProgressIndicator(Modifier.fillMaxWidth(), color = colors.primary, trackColor = colors.border)
             } else if (searchResults.isNotEmpty()) {
                 Column(
                     modifier = Modifier.fillMaxWidth().clip(RoundedShape12)
-                        .background(MidnightBlack).border(1.dp, BorderBlue, RoundedShape12).padding(4.dp)
+                        .background(colors.background).border(1.dp, colors.border, RoundedShape12).padding(4.dp)
                 ) {
-                    Text("Search Results:", fontSize = 11.sp, color = TextGray, fontWeight = FontWeight.Bold,
+                    Text("Search Results:", fontSize = 11.sp, color = colors.textSecondary, fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
                     searchResults.take(4).forEach { res ->
                         Row(
@@ -720,9 +900,9 @@ private fun DestinationConfigCard(
                                 .padding(horizontal = 12.dp, vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(Icons.Filled.LocationOn, null, tint = NeonCyan, modifier = Modifier.size(16.dp))
+                            Icon(Icons.Filled.LocationOn, null, tint = colors.secondary, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(8.dp))
-                            Text(res.name, color = TextWhite, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(res.name, color = colors.textPrimary, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                     }
                 }
@@ -735,36 +915,36 @@ private fun DestinationConfigCard(
             selectedDestination?.let { dest ->
                 Box(
                     modifier = Modifier.fillMaxWidth().clip(RoundedShape14)
-                        .background(MidnightBlack).border(1.dp, ElectricPurple.copy(alpha = 0.4f), RoundedShape14).padding(14.dp)
+                        .background(colors.background).border(1.dp, colors.primary.copy(alpha = 0.4f), RoundedShape14).padding(14.dp)
                 ) {
                     Column {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Filled.DirectionsTransit, "Target", tint = CyberPink, modifier = Modifier.size(20.dp))
+                            Icon(Icons.Filled.DirectionsTransit, "Target", tint = colors.tertiary, modifier = Modifier.size(20.dp))
                             Spacer(Modifier.width(8.dp))
-                            Text("Selected Destination:", fontSize = 12.sp, color = TextGray, fontWeight = FontWeight.Bold)
+                            Text("Selected Destination:", fontSize = 12.sp, color = colors.textSecondary, fontWeight = FontWeight.Bold)
                         }
                         Spacer(Modifier.height(4.dp))
-                        Text(dest.name, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = TextWhite, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        Text(dest.name, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         Spacer(Modifier.height(2.dp))
-                        Text("Coordinates: ${"%.5f".format(dest.latitude)}, ${"%.5f".format(dest.longitude)}", fontSize = 11.sp, color = NeonCyan)
+                        Text("Coordinates: ${"%.5f".format(dest.latitude)}, ${"%.5f".format(dest.longitude)}", fontSize = 11.sp, color = colors.secondary)
                     }
                 }
             }
 
             // Radius configurator
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Alarm Trigger Radius: ${alarmRadius.toInt()} meters", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextWhite)
+                Text("Alarm Trigger Radius: ${alarmRadius.toInt()} meters", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
 
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                     items(RadiusPresets) { rad ->
                         val sel = alarmRadius == rad
                         Box(
                             modifier = Modifier.clip(RoundedCornerShape(10.dp))
-                                .background(if (sel) ElectricPurple else BorderBlue)
+                                .background(if (sel) colors.primary else colors.border)
                                 .clickable { onRadiusChange(rad) }
                                 .padding(horizontal = 14.dp, vertical = 8.dp)
                         ) {
-                            Text("${rad.toInt()}m", color = if (sel) Color.White else TextGray,
+                            Text("${rad.toInt()}m", color = if (sel) Color.White else colors.textSecondary,
                                 fontSize = 12.sp, fontWeight = if (sel) FontWeight.Bold else FontWeight.Medium)
                         }
                     }
@@ -773,7 +953,7 @@ private fun DestinationConfigCard(
                 Slider(
                     value = alarmRadius, onValueChange = onRadiusChange,
                     valueRange = 50f..2000f,
-                    colors = SliderDefaults.colors(thumbColor = ElectricPurple, activeTrackColor = ElectricPurple, inactiveTrackColor = BorderBlue),
+                    colors = SliderDefaults.colors(thumbColor = colors.primary, activeTrackColor = colors.primary, inactiveTrackColor = colors.border),
                     modifier = Modifier.fillMaxWidth()
                 )
             }
@@ -782,7 +962,7 @@ private fun DestinationConfigCard(
             Button(
                 onClick = onActivate, enabled = selectedDestination != null,
                 modifier = Modifier.fillMaxWidth().height(50.dp).shadow(8.dp, shape = RoundedShape12),
-                colors = ButtonDefaults.buttonColors(containerColor = ElectricPurple, disabledContainerColor = BorderBlue),
+                colors = ButtonDefaults.buttonColors(containerColor = colors.primary, disabledContainerColor = colors.border),
                 shape = RoundedShape12
             ) {
                 Icon(Icons.Filled.NotificationsActive, null, tint = Color.White)
@@ -796,37 +976,38 @@ private fun DestinationConfigCard(
 @Composable
 private fun PresetsCard(
     selectedDestination: SearchResult?,
-    onSelectPreset: (PresetLocation) -> Unit
+    onSelectPreset: (PresetLocation) -> Unit,
+    colors: ThemeColors
 ) {
     Card(
-        colors = CardDefaults.cardColors(containerColor = CardBg),
+        colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
         shape = RoundedShape20,
-        modifier = Modifier.fillMaxWidth().border(1.dp, BorderBlue, RoundedShape20)
+        modifier = Modifier.fillMaxWidth().border(1.dp, colors.border, RoundedShape20)
     ) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(18.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Text("QUICK METRO STATION PRESETS", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = NeonCyan, letterSpacing = 1.sp)
+            Text("QUICK METRO STATION PRESETS", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = colors.secondary, letterSpacing = 1.sp)
 
             LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
                 items(TransitPresets) { preset ->
                     val sel = selectedDestination?.latitude == preset.latitude
                     Card(
                         colors = CardDefaults.cardColors(
-                            containerColor = if (sel) ElectricPurple.copy(alpha = 0.2f) else MidnightBlack
+                            containerColor = if (sel) colors.primary.copy(alpha = 0.2f) else colors.background
                         ),
                         shape = RoundedShape12,
                         modifier = Modifier.width(160.dp)
-                            .border(1.dp, if (sel) ElectricPurple else BorderBlue, RoundedShape12)
+                            .border(1.dp, if (sel) colors.primary else colors.border, RoundedShape12)
                             .clickable { onSelectPreset(preset) }
                     ) {
                         Column(
                             modifier = Modifier.fillMaxWidth().padding(12.dp),
                             verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            Text(preset.name, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextWhite, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text(preset.description, fontSize = 10.sp, color = TextGray, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                            Text(preset.name, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(preset.description, fontSize = 10.sp, color = colors.textSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         }
                     }
                 }
@@ -840,7 +1021,8 @@ private fun AlarmOverlay(
     pulseAlpha: Float,
     trackingName: String,
     currentDistance: Float?,
-    context: Context
+    context: Context,
+    colors: ThemeColors
 ) {
     Box(
         modifier = Modifier.fillMaxSize().background(AlarmRed.copy(alpha = pulseAlpha))
@@ -848,7 +1030,7 @@ private fun AlarmOverlay(
         contentAlignment = Alignment.Center
     ) {
         Card(
-            colors = CardDefaults.cardColors(containerColor = MidnightBlack.copy(alpha = 0.95f)),
+            colors = CardDefaults.cardColors(containerColor = colors.background.copy(alpha = 0.95f)),
             shape = RoundedShape28,
             modifier = Modifier.fillMaxWidth(0.85f).border(2.dp, AlarmRed, RoundedShape28)
                 .shadow(24.dp, spotColor = AlarmRed)
@@ -867,13 +1049,13 @@ private fun AlarmOverlay(
                 }
 
                 Text("WAKE UP!", fontSize = 32.sp, fontWeight = FontWeight.Black, color = AlarmRed, letterSpacing = 1.sp)
-                Text("You are about to reach:", fontSize = 14.sp, color = TextGray)
-                Text(trackingName, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = TextWhite,
+                Text("You are about to reach:", fontSize = 14.sp, color = colors.textSecondary)
+                Text(trackingName, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary,
                     textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis)
 
                 currentDistance?.let {
                     Text("Current Distance: ${formatDistanceUI(it)}", fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold, color = NeonCyan)
+                        fontWeight = FontWeight.Bold, color = colors.secondary)
                 }
 
                 Spacer(Modifier.height(10.dp))
@@ -900,17 +1082,15 @@ private fun AlarmOverlay(
 //  UTILITY FUNCTIONS
 // ════════════════════════════════════════════════════════════
 
-/** Fast distance formatting without String.format (avoids Locale/regex overhead) */
 private fun formatDistanceUI(distance: Float): String {
     return if (distance >= 1000f) {
-        val km = (distance / 10f).toInt() / 100f // two decimal places
+        val km = (distance / 10f).toInt() / 100f
         "$km km"
     } else {
         "${distance.toInt()} m"
     }
 }
 
-/** Nominatim HTTP fallback search */
 private fun searchNominatim(query: String): List<SearchResult> {
     val encoded = java.net.URLEncoder.encode(query, "UTF-8")
     val conn = (java.net.URL("https://nominatim.openstreetmap.org/search?q=$encoded&format=json&limit=5")

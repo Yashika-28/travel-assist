@@ -76,11 +76,14 @@ class LocationAlarmService : Service() {
         destinationLat = lat
         destinationLon = lon
         destinationName.value = name
+        destinationLatitude.value = lat
+        destinationLongitude.value = lon
         targetRadius = radius
 
         isTracking.value = true
         alarmTriggered.value = false
         currentDistance.value = null
+        currentUserLocation.value = null
         lastNotificationUpdateMs = 0L
 
         val notification = buildNotification("Starting location tracking...")
@@ -99,6 +102,9 @@ class LocationAlarmService : Service() {
         isTracking.value = false
         alarmTriggered.value = false
         currentDistance.value = null
+        currentUserLocation.value = null
+        destinationLatitude.value = null
+        destinationLongitude.value = null
         destinationName.value = ""
         stopForeground(STOP_FOREGROUND_REMOVE)
     }
@@ -158,6 +164,7 @@ class LocationAlarmService : Service() {
         )
         val distance = distanceResult[0]
         currentDistance.value = distance
+        currentUserLocation.value = location
 
         // --- OPTIMIZATION: Adaptive GPS accuracy switching ---
         // Switch to high accuracy when within 2km, back to balanced when far away
@@ -259,16 +266,26 @@ class LocationAlarmService : Service() {
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                "MetroNap Location Alarm",
-                NotificationManager.IMPORTANCE_HIGH
+            val trackingChannel = NotificationChannel(
+                CHANNEL_ID_TRACKING,
+                "MetroNap Active Tracking",
+                NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "Real-time location monitoring and proximity alerts"
+                description = "Silent notification showing current distance to destination"
                 setSound(null, null)
                 enableVibration(false)
             }
-            notificationManager?.createNotificationChannel(channel)
+            val alarmChannel = NotificationChannel(
+                CHANNEL_ID_ALARM,
+                "MetroNap Proximity Alarm",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "High-priority notifications and alerts when arriving"
+                setSound(null, null)
+                enableVibration(false)
+            }
+            notificationManager?.createNotificationChannel(trackingChannel)
+            notificationManager?.createNotificationChannel(alarmChannel)
         }
     }
 
@@ -294,14 +311,26 @@ class LocationAlarmService : Service() {
             this, 0, mainActivityIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val builder = NotificationCompat.Builder(this, CHANNEL_ID)
+        val channelId = if (alarmTriggered.value) CHANNEL_ID_ALARM else CHANNEL_ID_TRACKING
+        val priority = if (alarmTriggered.value) NotificationCompat.PRIORITY_HIGH else NotificationCompat.PRIORITY_LOW
+        val deleteIntentAction = if (alarmTriggered.value) ACTION_DISMISS_ALARM else ACTION_STOP_TRACKING
+
+        val deleteIntent = Intent(this, LocationAlarmService::class.java).apply {
+            action = deleteIntentAction
+        }
+        val deletePendingIntent = PendingIntent.getService(
+            this, 3, deleteIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val builder = NotificationCompat.Builder(this, channelId)
             .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
             .setContentTitle(if (alarmTriggered.value) "\uD83D\uDEA8 Wake Up!" else "MetroNap Tracking")
             .setContentText(contentText)
             .setContentIntent(contentPendingIntent)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setPriority(priority)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .setOngoing(true)
+            .setDeleteIntent(deletePendingIntent)
 
         if (alarmTriggered.value) {
             builder.addAction(android.R.drawable.ic_menu_close_clear_cancel, "Dismiss", dismissPendingIntent)
@@ -320,7 +349,8 @@ class LocationAlarmService : Service() {
     companion object {
         private const val NOTIFICATION_THROTTLE_MS = 3000L
 
-        const val CHANNEL_ID = "location_alarm_channel"
+        const val CHANNEL_ID_TRACKING = "location_tracking_channel"
+        const val CHANNEL_ID_ALARM = "location_alarm_channel"
         const val NOTIFICATION_ID = 1001
 
         const val ACTION_START_TRACKING = "ACTION_START_TRACKING"
@@ -336,5 +366,8 @@ class LocationAlarmService : Service() {
         val isTracking = MutableStateFlow(false)
         val alarmTriggered = MutableStateFlow(false)
         val destinationName = MutableStateFlow("")
+        val destinationLatitude = MutableStateFlow<Double?>(null)
+        val destinationLongitude = MutableStateFlow<Double?>(null)
+        val currentUserLocation = MutableStateFlow<Location?>(null)
     }
 }
