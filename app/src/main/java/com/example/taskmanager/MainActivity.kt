@@ -234,11 +234,11 @@ class MainActivity : ComponentActivity() {
 fun fitMapToPoints(mapView: MapView?, p1: GeoPoint?, p2: GeoPoint?) {
     if (mapView == null || p1 == null || p2 == null) return
     try {
-        val points = ArrayList<GeoPoint>().apply {
-            add(p1)
-            add(p2)
-        }
-        val box = BoundingBox.fromGeoPoints(points)
+        val minLat = minOf(p1.latitude, p2.latitude)
+        val maxLat = maxOf(p1.latitude, p2.latitude)
+        val minLon = minOf(p1.longitude, p2.longitude)
+        val maxLon = maxOf(p1.longitude, p2.longitude)
+        val box = BoundingBox(maxLat, maxLon, minLat, minLon)
         mapView.zoomToBoundingBox(box, true, 120)
     } catch (e: Exception) {
         Log.e("MetroNap", "Failed to fit map: ${e.message}")
@@ -473,7 +473,7 @@ fun MetroNapApp(
                     update = { mapView ->
                         // Synchronize map tile source with dark/light mode
                         val expectedTileSource = if (isDarkTheme) DarkMapTileSource else LightMapTileSource
-                        if (mapView.tileProvider.tileSource.name != expectedTileSource.name) {
+                        if (mapView.tileProvider.tileSource?.name() != expectedTileSource.name()) {
                             mapView.setTileSource(expectedTileSource)
                         }
 
